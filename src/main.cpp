@@ -11,13 +11,13 @@ ScreenController screen(TFT_CS, TFT_DC, TFT_RST, TOUCH_CS);
 
 void setup() {
   Serial.begin(9600);
-  Serial.println("ILI9341 Test!"); 
+  Serial.println("Dispenser Starting..."); 
 
   screen.begin();
 }
 
 
-void loop(void) {
+void loop() {
   screen.update();
 }
 
