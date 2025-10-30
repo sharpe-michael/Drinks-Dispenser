@@ -38,6 +38,7 @@ private:
     Button menuButtons[numMenuButtons];
 
     void drawText(int16_t x, int16_t y, const char* text, uint16_t color, uint8_t size);
+    void showRegularMenu();
     void drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
     void drawEye(int16_t x, int16_t y, bool blink, uint16_t bg);
     void showMenu();

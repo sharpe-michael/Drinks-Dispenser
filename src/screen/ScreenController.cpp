@@ -45,6 +45,9 @@ Button menuButtons[] = {
 };
 const int numMenuButtons = sizeof(menuButtons)/sizeof(menuButtons[0]);
 
+enum MenuType { REGULAR, TEST };
+MenuType currentMenu = TEST;
+
 void ScreenController::begin() {
     tft.begin();
     ts.begin();
@@ -59,29 +62,36 @@ void ScreenController::drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t co
     tft.drawCircle(x0, y0, r, color);
 }
 
+void ScreenController::showRegularMenu() {
+    tft.fillScreen(ILI9341_BLACK);
+    // Example regular menu layout
+    drawButton(0, 200, 320, 40, "Test Menu", ILI9341_WHITE, ILI9341_BLACK, true);
+    drawButton(0, 0, 160, 200, "Drink 1", ILI9341_WHITE, ILI9341_BLUE, true);
+    drawButton(160, 0, 160, 200, "Drink 2", ILI9341_WHITE, ILI9341_GREEN, true);
+}
+
 void ScreenController::showMenu() {
     tft.fillScreen(ILI9341_BLACK);
-    
-    // Regular Menu
-    // drawButton(0, 200, 320, 40, "Test", ILI9341_WHITE, ILI9341_BLACK, true);
-
-    // drawButton(0, 0, 160, 200, "Drink 1", ILI9341_WHITE, ILI9341_BLUE, true);
-    // drawButton(160, 0, 160, 200, "Drink 1", ILI9341_WHITE, ILI9341_GREEN, true);
-
-    // Test Menu
-    drawButton(0, 0, 320/3, 120, "Pump 1", ILI9341_WHITE, ILI9341_NAVY, true);
-    drawButton(320/3, 0, 320/3, 120, "Pump 2", ILI9341_WHITE, ILI9341_DARKGREEN, true);
-    drawButton(2*320/3, 0, 320/3, 120, "Pump 3", ILI9341_WHITE, ILI9341_RED, true);
-
-    drawButton(0, 120, 320/3, 120, "Servo", ILI9341_BLACK, ILI9341_ORANGE, true);
-    drawButton(320/3, 120, 320/3, 120, "LEDs", ILI9341_BLACK, ILI9341_PINK, true);
-    drawButton(2*320/3, 120, 320/3, 120, "Back...", ILI9341_WHITE, ILI9341_BLACK, true);   
-    
+    if (currentMenu == REGULAR) {
+        showRegularMenu();
+    } else {
+        // Test Menu
+        drawButton(0, 0, 320/3, 120, "Pump 1", ILI9341_WHITE, ILI9341_NAVY, true);
+        drawButton(320/3, 0, 320/3, 120, "Pump 2", ILI9341_WHITE, ILI9341_DARKGREEN, true);
+        drawButton(2*320/3, 0, 320/3, 120, "Pump 3", ILI9341_WHITE, ILI9341_RED, true);
+        drawButton(0, 120, 320/3, 120, "Servo", ILI9341_BLACK, ILI9341_ORANGE, true);
+        drawButton(320/3, 120, 320/3, 120, "LEDs", ILI9341_BLACK, ILI9341_PINK, true);
+        drawButton(2*320/3, 120, 320/3, 120, "Back...", ILI9341_WHITE, ILI9341_BLACK, true);   
+    }
 }
 
 void ScreenController::update() {
     unsigned long now = millis();
+    if (currentMenu == TEST && millis() > 10000) {
+        
+    }
     if (screenState != lastScreenState) {
+        tft.fillScreen(ILI9341_BLACK);
         if (screenState == ACTIVE) {
             showMenu();
         }
@@ -154,6 +164,11 @@ void ScreenController::drawButton(int16_t x, int16_t y, int16_t w, int16_t h, co
 }
 
 void ScreenController::handleButtonPress(int idx) {
+    if (currentMenu == TEST && strcmp(menuButtons[idx].label, "Back...") == 0) {
+        currentMenu = REGULAR;
+        showMenu();
+        return;
+    }
     // Example actions
     if (strcmp(menuButtons[idx].label, "Back...") == 0) {
         screenState = IDLE;
