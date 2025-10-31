@@ -2,7 +2,7 @@
 #include <FastLED.h>
 #include "leds/LEDController.h"
 
-#define DATA_PIN 6
+#define DATA_PIN A0
 
 // Helper variables for animation timing
 static uint32_t lastUpdate = 0;

@@ -7,15 +7,30 @@
 #include <XPT2046_Touchscreen.h>
 
 enum ScreenState { IDLE, ACTIVE };
+enum MenuType { REGULAR, TEST };
+
+struct Button {
+    int16_t x, y, w, h;
+    const char* label;
+    uint16_t color, bg;
+};
+
+struct TouchPoint {
+    int16_t x;
+    int16_t y;
+};
 
 class ScreenController {
 public:
+    // Renamed tftCsPin to screenCSPin for clarity in the header/constructor
     ScreenController(int8_t screenCSPin, int8_t dcPin, int8_t rstPin, int8_t touchCSPin);
     void begin();
     void update();
 private:
     Adafruit_ILI9341 tft;
     XPT2046_Touchscreen ts;
+
+    // Animation state variables
     unsigned long nextUpdateTime;
     int16_t eye_x = 80;
     int16_t eye_y = 80;
@@ -24,26 +39,39 @@ private:
     bool isBlinking = false;
     unsigned long blinkStartTime = 0;
     unsigned long nextBlinkTime = 0;
-    int16_t prev_eye_x = eye_x;
-    int16_t prev_eye_y = eye_y;
-    ScreenState screenState = ACTIVE;
+    int16_t prev_eye_x = 80;
+    int16_t prev_eye_y = 80;
+
+    // Screen state variables
+    MenuType currentMenu = REGULAR;
+    ScreenState screenState = IDLE; // Start in IDLE mode
     ScreenState lastScreenState = IDLE;
 
-    struct Button {
-        int16_t x, y, w, h;
-        const char* label;
-        uint16_t color, bg;
-    };
-    static const int numMenuButtons = 6;
-    Button menuButtons[numMenuButtons];
+    // --- Menu Management Members ---
+    static const int REGULAR_BUTTON_COUNT = 3; // Define array size
+    static const int TEST_BUTTON_COUNT = 5;    // Define array size
 
+    // The predefined button arrays
+    Button regularMenuButtons[REGULAR_BUTTON_COUNT];
+    Button testMenuButtons[TEST_BUTTON_COUNT];
+
+    // Pointers to the currently active menu array and its size - IDK what this does yet
+    Button* activeMenuButtons;
+    int numActiveMenuButtons;
+
+    TouchPoint lastTouch = {-1, -1};
+
+    // Private methods
     void drawText(int16_t x, int16_t y, const char* text, uint16_t color, uint8_t size);
+    void showMenu();
     void showRegularMenu();
+    void showTestMenu();
     void drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
     void drawEye(int16_t x, int16_t y, bool blink, uint16_t bg);
-    void showMenu();
     void drawButton(int16_t x, int16_t y, int16_t w, int16_t h, const char* label, uint16_t color, uint16_t bg, bool hasBorder);
     void handleButtonPress(int idx);
+    int16_t mapTouchX(int16_t rawX);
+    int16_t mapTouchY(int16_t rawY);
 };
 
 #endif // SCREENCONTROLLER_H

@@ -4,12 +4,29 @@
 #include "ScreenController.h"
 #include <XPT2046_Touchscreen.h>
 
+#define DEBUG_TOUCH false
+
 ScreenController::ScreenController(int8_t tftCsPin, int8_t dcPin, int8_t rstPin, int8_t touchCSPin)
-    : tft(Adafruit_ILI9341(tftCsPin, dcPin, rstPin)), ts(touchCSPin) {
+    : tft(Adafruit_ILI9341(tftCsPin, dcPin, rstPin)), ts(touchCSPin)
+{
     pinMode(tftCsPin, OUTPUT);
     digitalWrite(tftCsPin, HIGH); // Deselect display
     pinMode(touchCSPin, OUTPUT);
     digitalWrite(touchCSPin, HIGH); // Deselect touch
+
+    // Initialize Regular Menu Buttons
+    // Regular Menu Buttons - "Sezier" look: rounded corners, bold colors, larger text
+    regularMenuButtons[0] = {20, 30, 100, 50, "Drink 1", ILI9341_WHITE, ILI9341_BLUE};
+    regularMenuButtons[2] = {20, 100, 210, 50, "Drink 2...", ILI9341_WHITE, ILI9341_RED};
+    regularMenuButtons[1] = {130, 30, 100, 50, "Test", ILI9341_WHITE, ILI9341_GREEN};
+
+    // Test Menu Buttons - "Sezier" look: more vibrant backgrounds, bigger, rounded
+    testMenuButtons[0] = {20, 30, 70, 50, "P1", ILI9341_WHITE, ILI9341_CYAN};
+    testMenuButtons[1] = {100, 30, 70, 50, "P2", ILI9341_WHITE, ILI9341_MAGENTA};
+    testMenuButtons[2] = {180, 30, 70, 50, "P3", ILI9341_WHITE, ILI9341_YELLOW};
+    testMenuButtons[3] = {20, 90, 70, 50, "Servo", ILI9341_WHITE, ILI9341_ORANGE};
+    testMenuButtons[4] = {100, 90, 70, 50, "LEDS", ILI9341_WHITE, ILI9341_PURPLE};
+    testMenuButtons[5] = {20, 150, 230, 50, "Back...", ILI9341_WHITE, ILI9341_RED};
 }
 
 // Animation state variables
@@ -25,117 +42,165 @@ unsigned long nextBlinkTime = 0;
 int16_t prev_eye_x = eye_x;
 int16_t prev_eye_y = eye_y;
 
-
-ScreenState screenState = ACTIVE;
+ScreenState screenState = IDLE;
 ScreenState lastScreenState = IDLE;
 
-// Button structure for easy hit testing
-struct Button {
-    int16_t x, y, w, h;
-    const char* label;
-    uint16_t color, bg;
-};
-Button menuButtons[] = {
-    {0, 0, 320/3, 120, "Pump 1", ILI9341_WHITE, ILI9341_NAVY},
-    {320/3, 0, 320/3, 120, "Pump 2", ILI9341_WHITE, ILI9341_DARKGREEN},
-    {2*320/3, 0, 320/3, 120, "Pump 3", ILI9341_WHITE, ILI9341_RED},
-    {0, 120, 320/3, 120, "Servo", ILI9341_BLACK, ILI9341_ORANGE},
-    {320/3, 120, 320/3, 120, "LEDs", ILI9341_BLACK, ILI9341_PINK},
-    {2*320/3, 120, 320/3, 120, "Back...", ILI9341_WHITE, ILI9341_BLACK}
-};
-const int numMenuButtons = sizeof(menuButtons)/sizeof(menuButtons[0]);
+// Calibration values (adjust for your hardware)
+#define TS_MINX 200
+#define TS_MAXX 3800
+#define TS_MINY 200
+#define TS_MAXY 3800
 
-enum MenuType { REGULAR, TEST };
-MenuType currentMenu = TEST;
+// Map raw touch to pixel coordinates (member functions)
+int16_t ScreenController::mapTouchX(int16_t rawX)
+{
+    return constrain(map(rawX, TS_MINX, TS_MAXX, 0, tft.width() - 1), 0, tft.width() - 1);
+}
+int16_t ScreenController::mapTouchY(int16_t rawY)
+{
+    return constrain(map(rawY, TS_MINY, TS_MAXY, 0, tft.height() - 1), 0, tft.height() - 1);
+}
 
-void ScreenController::begin() {
+void ScreenController::begin()
+{
     tft.begin();
     ts.begin();
-    ts.setRotation(1); // Match screen orientation
+    ts.setRotation(1);  // Match screen orientation
     tft.setRotation(3); // Landscape mode
     nextUpdateTime = millis();
     nextBlinkTime = millis() + random(2000, 5000); // Blink every 2-5 seconds
     tft.fillScreen(ILI9341_BLACK);
+    screenState = IDLE;
+
+    // Set initial active menu
+    activeMenuButtons = regularMenuButtons;
+    numActiveMenuButtons = REGULAR_BUTTON_COUNT;
 }
 
-void ScreenController::drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color) {
+void ScreenController::drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color)
+{
     tft.drawCircle(x0, y0, r, color);
 }
 
-void ScreenController::showRegularMenu() {
+void ScreenController::showRegularMenu()
+{
     tft.fillScreen(ILI9341_BLACK);
-    // Example regular menu layout
-    drawButton(0, 200, 320, 40, "Test Menu", ILI9341_WHITE, ILI9341_BLACK, true);
-    drawButton(0, 0, 160, 200, "Drink 1", ILI9341_WHITE, ILI9341_BLUE, true);
-    drawButton(160, 0, 160, 200, "Drink 2", ILI9341_WHITE, ILI9341_GREEN, true);
+
+    for (int i = 0; i < REGULAR_BUTTON_COUNT; ++i)
+    {
+        Button &btn = regularMenuButtons[i];
+        drawButton(btn.x, btn.y, btn.w, btn.h, btn.label, btn.color, btn.bg, true);
+    }
 }
 
-void ScreenController::showMenu() {
+void ScreenController::showTestMenu()
+{
     tft.fillScreen(ILI9341_BLACK);
-    if (currentMenu == REGULAR) {
+
+    for (int i = 0; i < TEST_BUTTON_COUNT; ++i)
+    {
+        Button &btn = testMenuButtons[i];
+        drawButton(btn.x, btn.y, btn.w, btn.h, btn.label, btn.color, btn.bg, true);
+    }
+}
+
+void ScreenController::showMenu()
+{
+    tft.fillScreen(ILI9341_BLACK);
+    if (currentMenu == REGULAR)
+    {
         showRegularMenu();
-    } else {
-        // Test Menu
-        drawButton(0, 0, 320/3, 120, "Pump 1", ILI9341_WHITE, ILI9341_NAVY, true);
-        drawButton(320/3, 0, 320/3, 120, "Pump 2", ILI9341_WHITE, ILI9341_DARKGREEN, true);
-        drawButton(2*320/3, 0, 320/3, 120, "Pump 3", ILI9341_WHITE, ILI9341_RED, true);
-        drawButton(0, 120, 320/3, 120, "Servo", ILI9341_BLACK, ILI9341_ORANGE, true);
-        drawButton(320/3, 120, 320/3, 120, "LEDs", ILI9341_BLACK, ILI9341_PINK, true);
-        drawButton(2*320/3, 120, 320/3, 120, "Back...", ILI9341_WHITE, ILI9341_BLACK, true);   
+    }
+    else
+    {
+        showTestMenu();
     }
 }
 
-void ScreenController::update() {
+void ScreenController::update()
+{
     unsigned long now = millis();
-    if (currentMenu == TEST && millis() > 10000) {
-        
-    }
-    if (screenState != lastScreenState) {
+    if (screenState != lastScreenState)
+    {
         tft.fillScreen(ILI9341_BLACK);
-        if (screenState == ACTIVE) {
+        if (screenState == ACTIVE)
+        {
             showMenu();
         }
         lastScreenState = screenState;
     }
-    if (screenState == IDLE) {
+    if (screenState == IDLE)
+    {
+        if (ts.touched())
+        {
+            screenState = ACTIVE;
+            return;
+        }
         // Move eye
-        if (now >= nextUpdateTime) {
+        if (now >= nextUpdateTime)
+        {
             // Erase previous eye by drawing over it with background color
             drawEye(prev_eye_x, prev_eye_y, false, ILI9341_BLACK);
             prev_eye_x = eye_x;
             prev_eye_y = eye_y;
             eye_x += eye_dx;
             eye_y += eye_dy;
-            if (eye_x < 60 || eye_x > tft.width() - 60) eye_dx = -eye_dx;
-            if (eye_y < 60 || eye_y > tft.height() - 60) eye_dy = -eye_dy;
+            if (eye_x < 60 || eye_x > tft.width() - 60)
+                eye_dx = -eye_dx;
+            if (eye_y < 60 || eye_y > tft.height() - 60)
+                eye_dy = -eye_dy;
             drawEye(eye_x, eye_y, isBlinking, ILI9341_WHITE);
             nextUpdateTime = now + 100; // Smooth movement
         }
         // Handle blinking
-        if (!isBlinking && now >= nextBlinkTime) {
+        if (!isBlinking && now >= nextBlinkTime)
+        {
             isBlinking = true;
             blinkStartTime = now;
             drawEye(eye_x, eye_y, true, ILI9341_WHITE);
         }
-        if (isBlinking && now - blinkStartTime > 200) { // Blink lasts 200ms
+        if (isBlinking && now - blinkStartTime > 200)
+        { // Blink lasts 200ms
             isBlinking = false;
             nextBlinkTime = now + random(2000, 5000);
             drawEye(eye_x, eye_y, false, ILI9341_WHITE);
         }
-    } else if (screenState == ACTIVE) {
-        // Menu is only drawn once when entering ACTIVE
-        // Add menu interaction logic here
-        // Touch handling for menu
-        if (ts.touched()) {
+    }
+    else if (screenState == ACTIVE)
+    {
+        if (ts.touched())
+        {
             TS_Point p = ts.getPoint();
-            // Map touch coordinates if needed (depends on wiring)
-            int16_t tx = p.x;
-            int16_t ty = p.y;
-            // If needed, swap/flip tx/ty here
-            for (int i = 0; i < numMenuButtons; ++i) {
-                Button& btn = menuButtons[i];
-                if (tx >= btn.x && tx < btn.x + btn.w && ty >= btn.y && ty < btn.y + btn.h) {
+            // Map touch coordinates to pixels
+            int16_t tx = mapTouchX(p.x);
+            int16_t ty = mapTouchY(p.y);
+            if (p.z < 1200)
+            {
+                return; // Ignore light touches
+            }
+            if (DEBUG_TOUCH)
+            {
+                Serial.print("Touch coords: X=");
+                Serial.print(tx);
+                Serial.print(", Y=");
+                Serial.print(ty);
+                Serial.print(" Pressure=");
+                Serial.println(p.z);
+                // Draw debug circle at every touch
+                tft.drawCircle(tx, ty, 10, ILI9341_RED);
+            }
+            lastTouch.x = tx;
+            lastTouch.y = ty;
+            Button *menuButtons = (currentMenu == REGULAR) ? regularMenuButtons : testMenuButtons;
+            int numMenuButtons = (currentMenu == REGULAR) ? REGULAR_BUTTON_COUNT : TEST_BUTTON_COUNT;
+            for (int i = 0; i < numMenuButtons; ++i)
+            {
+                Button &btn = menuButtons[i];
+                if (tx >= btn.x && tx < btn.x + btn.w && ty >= btn.y && ty < btn.y + btn.h)
+                {
                     // Button pressed
+                    Serial.print("Button pressed: ");
+                    Serial.println(btn.label);
                     handleButtonPress(i);
                 }
             }
@@ -143,17 +208,22 @@ void ScreenController::update() {
     }
 }
 
-void ScreenController::drawEye(int16_t x, int16_t y, bool blink, uint16_t bg) {
+void ScreenController::drawEye(int16_t x, int16_t y, bool blink, uint16_t bg)
+{
     tft.fillCircle(x, y, 60, bg); // Erase or draw white part
-    if (blink) {
+    if (blink)
+    {
         tft.fillRect(x - 60, y - 10, 120, 20, ILI9341_BLACK);
-    } else if (bg == ILI9341_WHITE) {
+    }
+    else if (bg == ILI9341_WHITE)
+    {
         tft.fillCircle(x, y, 30, ILI9341_BLACK); // Pupil
     }
 }
 
-void ScreenController::drawButton(int16_t x, int16_t y, int16_t w, int16_t h, const char* label, uint16_t color, uint16_t bg, bool hasBorder ) {
-    tft.fillRect(x, y, w, h, bg); // Button background
+void ScreenController::drawButton(int16_t x, int16_t y, int16_t w, int16_t h, const char *label, uint16_t color, uint16_t bg, bool hasBorder)
+{
+    tft.fillRect(x, y, w, h, bg);            // Button background
     tft.drawRect(x, y, w, h, ILI9341_WHITE); // Button border
     tft.setTextColor(color);
     tft.setTextSize(2);
@@ -163,23 +233,59 @@ void ScreenController::drawButton(int16_t x, int16_t y, int16_t w, int16_t h, co
     tft.print(label);
 }
 
-void ScreenController::handleButtonPress(int idx) {
-    if (currentMenu == TEST && strcmp(menuButtons[idx].label, "Back...") == 0) {
-        currentMenu = REGULAR;
-        showMenu();
-        return;
+void ScreenController::handleButtonPress(int idx)
+{
+    if (currentMenu == REGULAR)
+    {
+        Button &btn = regularMenuButtons[idx];
+        if (strcmp(btn.label, "Drink 1") == 0)
+        { // Start button
+            Serial.println("Dispensing drink 1...");
+            // Implement start functionality here
+        }
+        else if (strcmp(btn.label, "Drink 2...") == 0)
+        { // Back button
+            Serial.println("Dispensing drink 2...");
+            // Implement drink 2 functionality here
+        }
+        else if (strcmp(btn.label, "Test") == 0)
+        { // Test button
+            currentMenu = TEST;
+            showMenu();
+        }
     }
-    // Example actions
-    if (strcmp(menuButtons[idx].label, "Back...") == 0) {
-        screenState = IDLE;
-    } else {
-        // Add your own actions for each button
-        tft.fillScreen(ILI9341_BLACK);
-        tft.setTextColor(ILI9341_YELLOW);
-        tft.setTextSize(3);
-        tft.setCursor(40, 100);
-        tft.print(menuButtons[idx].label);
-        delay(500); // Show feedback (non-blocking recommended for production)
-        showMenu();
+    else if (currentMenu == TEST)
+    {
+        Button &btn = testMenuButtons[idx];
+        if (strcmp(btn.label, "Back...") == 0)
+        { // T1 button
+            Serial.println("Back to Regular Menu");
+            currentMenu = REGULAR;
+            showMenu();
+        }
+        else if (strcmp(btn.label, "P1") == 0)
+        { // T1 button
+            Serial.println("Pump 1 test");
+            // Implement Pump 1 functionality here
+        }
+        else if (strcmp(btn.label, "P2") == 0)
+        { // T2 button
+            Serial.println("Pump 2 selected");
+            // Implement Pump 2 functionality here
+        }
+        else if (strcmp(btn.label, "P3") == 0)
+        { // T3 button
+            Serial.println("Pump 3 selected");
+            // Implement Pump 3 functionality here
+        }
+        else if (strcmp(btn.label, "Servo") == 0)
+        { // Servo button
+            Serial.println("Servo test selected");
+            // Implement Servo functionality here
+        }
+        else if (strcmp(btn.label, "LEDS") == 0)
+        { // LEDS button
+            Serial.println("LEDs test selected");
+        };
     }
 }

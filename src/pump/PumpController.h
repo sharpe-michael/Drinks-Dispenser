@@ -3,7 +3,7 @@
 class PumpController
 {
 private:
-    float flowRate = 1.5; // in liters per minute
+    float flowRate = 2; // in liters per minute
     uint16_t timeToStopMillis = 0;
 public:
     PumpController(uint16_t pumpPin) {

@@ -4,9 +4,7 @@
 class LEDController
 {
 public:
-    LEDController(int dataPin, int numLEDs) : dataPin(dataPin), numLEDs(numLEDs)
-    {
-    }
+    LEDController(int dataPin, int numLEDs);
 
     void setColor(int index, CRGB color);
     void show();
