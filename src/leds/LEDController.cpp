@@ -3,25 +3,30 @@
 #include "leds/LEDController.h"
 
 #define DATA_PIN A0
+#define numLEDs 16
 
-// Helper variables for animation timing
-static uint32_t lastUpdate = 0;
-static int idleIndex = 0;
-static uint8_t rainbowHue = 0;
-static bool finishedOn = false;
-
-LEDController::LEDController(int dataPin, int numLEDs) : dataPin(dataPin), numLEDs(numLEDs)
+LEDController::LEDController()
 {
     leds = new CRGB[numLEDs];
-    FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, numLEDs);
-    FastLED.setBrightness(128); // Set initial brightness to 50%
+}
+
+void LEDController::begin()
+{
+    FastLED.addLeds<WS2812B, DATA_PIN>(leds, numLEDs);
+    FastLED.setBrightness(255); // Set initial brightness to 50%
     // Default to IDLE mode
-    mode = IDLE;
+    mode = IDLE_LEDS;
+
+    lastUpdate = millis();
+    idleIndex = 0;
+    rainbowHue = 0;
+    finishedOn = false;
 }
 
 void LEDController::setColor(int index, CRGB color)
 {
-    if (index >= 0 && index < numLEDs) {
+    if (index >= 0 && index < numLEDs)
+    {
         leds[index] = color;
     }
 }
@@ -35,7 +40,7 @@ void LEDController::update()
 {
     uint32_t now = millis();
     switch (mode) {
-        case IDLE:
+        case IDLE_LEDS:
             // Slow blue color wipe
             if (now - lastUpdate > 100) {
                 for (int i = 0; i < numLEDs; ++i) leds[i] = CRGB::Black;
@@ -45,7 +50,7 @@ void LEDController::update()
                 lastUpdate = now;
             }
             break;
-        case DISPENSING:
+        case DISPENSING_LEDS:
             // Fast rainbow cycle
             if (now - lastUpdate > 30) {
                 for (int i = 0; i < numLEDs; ++i) {
@@ -56,7 +61,7 @@ void LEDController::update()
                 lastUpdate = now;
             }
             break;
-        case FINISHED:
+        case FINISHED_LEDS:
             // All LEDs flash green
             if (now - lastUpdate > 250) {
                 finishedOn = !finishedOn;

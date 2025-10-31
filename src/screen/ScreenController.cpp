@@ -6,9 +6,15 @@
 
 #define DEBUG_TOUCH false
 
-ScreenController::ScreenController(int8_t tftCsPin, int8_t dcPin, int8_t rstPin, int8_t touchCSPin)
+ScreenController::ScreenController(int8_t tftCsPin, int8_t dcPin, int8_t rstPin, int8_t touchCSPin, LEDController* ledCtrl, PumpController* pump1, PumpController* pump2, PumpController* pump3, ServoController* servoCtrl)
     : tft(Adafruit_ILI9341(tftCsPin, dcPin, rstPin)), ts(touchCSPin)
 {
+    this->ledController = ledCtrl;
+    this->pump1 = pump1;
+    this->pump2 = pump2;
+    this->pump3 = pump3;
+    this->servoController = servoCtrl;
+
     pinMode(tftCsPin, OUTPUT);
     digitalWrite(tftCsPin, HIGH); // Deselect display
     pinMode(touchCSPin, OUTPUT);
@@ -266,26 +272,39 @@ void ScreenController::handleButtonPress(int idx)
         else if (strcmp(btn.label, "P1") == 0)
         { // T1 button
             Serial.println("Pump 1 test");
-            // Implement Pump 1 functionality here
+            this->pump1->dispenseVolume(200); // Dispense 200 mL for testing
         }
         else if (strcmp(btn.label, "P2") == 0)
         { // T2 button
             Serial.println("Pump 2 selected");
-            // Implement Pump 2 functionality here
+            this->pump2->dispenseVolume(200); // Dispense 200 mL for testing
         }
         else if (strcmp(btn.label, "P3") == 0)
         { // T3 button
             Serial.println("Pump 3 selected");
-            // Implement Pump 3 functionality here
+            this->pump3->dispenseVolume(200); // Dispense 200 mL for testing
         }
         else if (strcmp(btn.label, "Servo") == 0)
         { // Servo button
             Serial.println("Servo test selected");
-            // Implement Servo functionality here
+            this->servoController->close();
+            delay(1000);    
+            this->servoController->open();            
         }
         else if (strcmp(btn.label, "LEDS") == 0)
         { // LEDS button
             Serial.println("LEDs test selected");
+            LEDController* ledCtrl = this->ledController;
+            if (ledCtrl) {
+                if (ledCtrl->mode == DISPENSING_LEDS) {
+                    ledCtrl->mode = FINISHED_LEDS;
+                } else if (ledCtrl->mode == FINISHED_LEDS) {
+                    ledCtrl->mode = IDLE_LEDS;
+                } else
+                {
+                    ledCtrl->mode = DISPENSING_LEDS;
+                }
+            }
         };
     }
 }
