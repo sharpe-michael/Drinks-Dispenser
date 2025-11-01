@@ -4,9 +4,9 @@
 #include "ScreenController.h"
 #include <XPT2046_Touchscreen.h>
 
-#define DEBUG_TOUCH false
+#define DEBUG_TOUCH true
 
-ScreenController::ScreenController(int8_t tftCsPin, int8_t dcPin, int8_t rstPin, int8_t touchCSPin, LEDController* ledCtrl, PumpController* pump1, PumpController* pump2, PumpController* pump3, ServoController* servoCtrl)
+ScreenController::ScreenController(int8_t tftCsPin, int8_t dcPin, int8_t rstPin, int8_t touchCSPin, LEDController *ledCtrl, PumpController *pump1, PumpController *pump2, PumpController *pump3, ServoController *servoCtrl)
     : tft(Adafruit_ILI9341(tftCsPin, dcPin, rstPin)), ts(touchCSPin)
 {
     this->ledController = ledCtrl;
@@ -23,7 +23,7 @@ ScreenController::ScreenController(int8_t tftCsPin, int8_t dcPin, int8_t rstPin,
     // Initialize Regular Menu Buttons
     // Regular Menu Buttons - "Sezier" look: rounded corners, bold colors, larger text
     regularMenuButtons[0] = {20, 30, 100, 50, "Drink 1", ILI9341_WHITE, ILI9341_BLUE};
-    regularMenuButtons[2] = {20, 100, 210, 50, "Drink 2...", ILI9341_WHITE, ILI9341_RED};
+    regularMenuButtons[2] = {20, 100, 210, 50, "Drink 2", ILI9341_WHITE, ILI9341_RED};
     regularMenuButtons[1] = {130, 30, 100, 50, "Test", ILI9341_WHITE, ILI9341_GREEN};
 
     // Test Menu Buttons - "Sezier" look: more vibrant backgrounds, bigger, rounded
@@ -137,7 +137,7 @@ void ScreenController::update()
     }
     if (screenState == IDLE)
     {
-        if (ts.touched())
+        if (ts.touched() && !isPhantomTouch(ts.getPoint().x, ts.getPoint().y, ts.getPoint().z))
         {
             screenState = ACTIVE;
             return;
@@ -180,23 +180,13 @@ void ScreenController::update()
             // Map touch coordinates to pixels
             int16_t tx = mapTouchX(p.x);
             int16_t ty = mapTouchY(p.y);
-            if (p.z < 1200)
+
+            if (isPhantomTouch(tx, ty, p.z))
             {
-                return; // Ignore light touches
+                // Ignore phantom touch
+                return;
             }
-            if (DEBUG_TOUCH)
-            {
-                Serial.print("Touch coords: X=");
-                Serial.print(tx);
-                Serial.print(", Y=");
-                Serial.print(ty);
-                Serial.print(" Pressure=");
-                Serial.println(p.z);
-                // Draw debug circle at every touch
-                tft.drawCircle(tx, ty, 10, ILI9341_RED);
-            }
-            lastTouch.x = tx;
-            lastTouch.y = ty;
+
             Button *menuButtons = (currentMenu == REGULAR) ? regularMenuButtons : testMenuButtons;
             int numMenuButtons = (currentMenu == REGULAR) ? REGULAR_BUTTON_COUNT : TEST_BUTTON_COUNT;
             for (int i = 0; i < numMenuButtons; ++i)
@@ -210,6 +200,25 @@ void ScreenController::update()
                     handleButtonPress(i);
                 }
             }
+        }
+
+        int32_t durationSinceLastGoodTouch = now - lastGoodTouchTime;
+        if (durationSinceLastGoodTouch > 5000)
+        {
+            Serial.println("No touch detected for 5 seconds, returning to IDLE mode. Last good touch time: " + String(lastGoodTouchTime) + ", now: " + String(now) + ", duration: " + String(durationSinceLastGoodTouch) + "ms");
+            // No good touch for 10 seconds, go back to IDLE
+            screenState = IDLE;
+            tft.fillScreen(ILI9341_BLACK);
+            // Reset eye position
+            eye_x = tft.width() / 2;
+            eye_y = tft.height() / 2;
+            prev_eye_x = eye_x;
+            prev_eye_y = eye_y;
+            eye_dx = 3;
+            eye_dy = 2;
+            isBlinking = false;
+            nextBlinkTime = now + random(2000, 5000);
+            return;
         }
     }
 }
@@ -288,23 +297,99 @@ void ScreenController::handleButtonPress(int idx)
         { // Servo button
             Serial.println("Servo test selected");
             this->servoController->close();
-            delay(1000);    
-            this->servoController->open();            
+            delay(1000);
+            this->servoController->open();
         }
         else if (strcmp(btn.label, "LEDS") == 0)
         { // LEDS button
             Serial.println("LEDs test selected");
-            LEDController* ledCtrl = this->ledController;
-            if (ledCtrl) {
-                if (ledCtrl->mode == DISPENSING_LEDS) {
+            LEDController *ledCtrl = this->ledController;
+            if (ledCtrl)
+            {
+                if (ledCtrl->mode == DISPENSING_LEDS)
+                {
                     ledCtrl->mode = FINISHED_LEDS;
-                } else if (ledCtrl->mode == FINISHED_LEDS) {
+                }
+                else if (ledCtrl->mode == FINISHED_LEDS)
+                {
                     ledCtrl->mode = IDLE_LEDS;
-                } else
+                }
+                else
                 {
                     ledCtrl->mode = DISPENSING_LEDS;
                 }
             }
         };
     }
+}
+
+bool ScreenController::isPhantomTouch(int16_t tx, int16_t ty, uint16_t pressure)
+{
+
+    // Phantom touch filtering
+    /**
+     * It's likely to be a phantom touch if:
+     * - The touch position is far away from the last touch position
+     * - The touch pressure is low
+     * - The touch is very brief
+     *
+     * Therefore, we ignore touches that are:
+     * - More than 50 pixels away from last touch
+     * - Pressure below 1500
+     * - Duration less than 50ms
+     */
+    if (pressure < 1200)
+    {
+        return true; // Ignore light touches
+    }
+
+    if (pressure > 2400)
+    {
+        if (DEBUG_TOUCH)
+        {
+            Serial.println("Ignored touch due to overly hard pressure");
+        }
+        return true; // Ignore overly hard touches
+    }
+    if (millis() - this->lastTouchTime > 300)
+    {
+        if (DEBUG_TOUCH)
+        {
+            Serial.println("Ignored touch due to brief duration: " + String(millis() - lastTouchTime) + "ms");
+        }
+        this->lastTouchTime = millis();
+        return true; // Ignore very brief touches
+    }
+    this->lastTouchTime = millis();
+    if (lastTouch.x != -1 && lastTouch.y != -1)
+    {
+        int16_t dx = abs(tx - lastTouch.x);
+        int16_t dy = abs(ty - lastTouch.y);
+        if (dx > 50 || dy > 50)
+        {
+            if (DEBUG_TOUCH)
+            {
+                Serial.println("Ignored touch due to large movement: " + String(dx) + "px, " + String(dy) + "px");
+            }
+            lastTouch.x = tx;
+            lastTouch.y = ty;
+            return true; // Ignore touches far from last touch
+        }
+    }
+    lastTouch.x = tx;
+    lastTouch.y = ty;
+
+    if (DEBUG_TOUCH)
+    {
+        Serial.print("Touch coords: X=");
+        Serial.print(tx);
+        Serial.print(", Y=");
+        Serial.print(ty);
+        Serial.print(" Pressure=");
+        Serial.println(pressure);
+        // Draw debug circle at every touch
+        tft.drawCircle(tx, ty, 10, ILI9341_RED);
+    }
+    this->lastGoodTouchTime = millis();
+    return false; // Valid touch
 }

@@ -79,6 +79,8 @@ private:
     int numActiveMenuButtons;
 
     TouchPoint lastTouch = {-1, -1};
+    uint16_t lastTouchTime = 0;
+    uint16_t lastGoodTouchTime = 0;
 
     // Private methods
     void drawText(int16_t x, int16_t y, const char *text, uint16_t color, uint8_t size);
@@ -91,6 +93,8 @@ private:
     void handleButtonPress(int idx);
     int16_t mapTouchX(int16_t rawX);
     int16_t mapTouchY(int16_t rawY);
+
+    bool isPhantomTouch(int16_t tx, int16_t ty, uint16_t pressure);
 };
 
 #endif // SCREENCONTROLLER_H
