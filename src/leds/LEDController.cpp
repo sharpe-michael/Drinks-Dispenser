@@ -12,8 +12,8 @@ LEDController::LEDController()
 
 void LEDController::begin()
 {
-    FastLED.addLeds<WS2812B, DATA_PIN>(leds, numLEDs);
-    FastLED.setBrightness(255); // Set initial brightness to 50%
+    FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, numLEDs);
+    FastLED.setBrightness(50); // Set initial brightness to 50%
     // Default to IDLE mode
     mode = IDLE_LEDS;
 
@@ -39,24 +39,33 @@ void LEDController::show()
 void LEDController::update()
 {
     uint32_t now = millis();
+
+    if (nextUpdateTime !=0 && now > nextUpdateTime) {
+        mode = nextUpdateMode;
+        nextUpdateTime = 0;
+    }
+
     switch (mode) {
         case IDLE_LEDS:
             // Slow blue color wipe
             if (now - lastUpdate > 100) {
                 for (int i = 0; i < numLEDs; ++i) leds[i] = CRGB::Black;
-                leds[idleIndex] = CRGB::Blue;
+                leds[idleIndex] = CRGB::OrangeRed;
                 idleIndex = (idleIndex + 1) % numLEDs;
                 show();
                 lastUpdate = now;
             }
             break;
         case DISPENSING_LEDS:
-            // Fast rainbow cycle
+            // Theater chase white
             if (now - lastUpdate > 30) {
                 for (int i = 0; i < numLEDs; ++i) {
-                    leds[i] = CHSV((rainbowHue + i * 8) % 255, 255, 255);
+                    if ((i + (now / 100)) % 3 == 0) {
+                        leds[i] = CRGB::White;
+                    } else {
+                        leds[i] = CRGB::Black;
+                    }
                 }
-                rainbowHue += 4;
                 show();
                 lastUpdate = now;
             }

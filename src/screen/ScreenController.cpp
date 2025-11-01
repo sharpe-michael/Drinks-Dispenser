@@ -41,8 +41,8 @@ int16_t eye_y = 80;
 int8_t eye_dx = 3;
 int8_t eye_dy = 2;
 bool isBlinking = false;
-unsigned long blinkStartTime = 0;
-unsigned long nextBlinkTime = 0;
+uint32_t blinkStartTime = 0;
+uint32_t nextBlinkTime = 0;
 
 // Store previous eye position
 int16_t prev_eye_x = eye_x;
@@ -125,13 +125,27 @@ void ScreenController::showMenu()
 
 void ScreenController::update()
 {
-    unsigned long now = millis();
+    if (nextScreenStateTime != 0 && millis() >= nextScreenStateTime)
+    {
+        screenState = nextScreenStateValue;
+        nextScreenStateTime = 0;
+    }
     if (screenState != lastScreenState)
     {
         tft.fillScreen(ILI9341_BLACK);
+        if (screenState == IDLE)
+        {
+            this->ledController->mode = IDLE_LEDS;
+        }
         if (screenState == ACTIVE)
         {
             showMenu();
+        }
+        if (screenState == FINISHED)
+        {
+            this->nextScreenStateValue = IDLE;
+            this->nextScreenStateTime = millis() + 5000; // After 15
+            this->servoController->open();
         }
         lastScreenState = screenState;
     }
@@ -143,7 +157,7 @@ void ScreenController::update()
             return;
         }
         // Move eye
-        if (now >= nextUpdateTime)
+        if (millis() >= nextUpdateTime)
         {
             // Erase previous eye by drawing over it with background color
             drawEye(prev_eye_x, prev_eye_y, false, ILI9341_BLACK);
@@ -156,19 +170,19 @@ void ScreenController::update()
             if (eye_y < 60 || eye_y > tft.height() - 60)
                 eye_dy = -eye_dy;
             drawEye(eye_x, eye_y, isBlinking, ILI9341_WHITE);
-            nextUpdateTime = now + 100; // Smooth movement
+            nextUpdateTime = millis() + 100; // Smooth movement
         }
         // Handle blinking
-        if (!isBlinking && now >= nextBlinkTime)
+        if (!isBlinking && millis() >= nextBlinkTime)
         {
             isBlinking = true;
-            blinkStartTime = now;
+            blinkStartTime = millis();
             drawEye(eye_x, eye_y, true, ILI9341_WHITE);
         }
-        if (isBlinking && now - blinkStartTime > 200)
+        if (isBlinking && millis() - blinkStartTime > 200)
         { // Blink lasts 200ms
             isBlinking = false;
-            nextBlinkTime = now + random(2000, 5000);
+            nextBlinkTime = millis() + random(2000, 5000);
             drawEye(eye_x, eye_y, false, ILI9341_WHITE);
         }
     }
@@ -202,10 +216,10 @@ void ScreenController::update()
             }
         }
 
-        int32_t durationSinceLastGoodTouch = now - lastGoodTouchTime;
+        uint32_t durationSinceLastGoodTouch = millis() - lastGoodTouchTime;
         if (durationSinceLastGoodTouch > 5000)
         {
-            Serial.println("No touch detected for 5 seconds, returning to IDLE mode. Last good touch time: " + String(lastGoodTouchTime) + ", now: " + String(now) + ", duration: " + String(durationSinceLastGoodTouch) + "ms");
+            Serial.println("No touch detected for 5 seconds, returning to IDLE mode. Last good touch time: " + String(lastGoodTouchTime) + ", now: " + String(millis()) + ", duration: " + String(durationSinceLastGoodTouch) + "ms");
             // No good touch for 10 seconds, go back to IDLE
             screenState = IDLE;
             tft.fillScreen(ILI9341_BLACK);
@@ -217,9 +231,25 @@ void ScreenController::update()
             eye_dx = 3;
             eye_dy = 2;
             isBlinking = false;
-            nextBlinkTime = now + random(2000, 5000);
+            nextBlinkTime = millis() + random(2000, 5000);
             return;
         }
+    }
+    else if (screenState == DISPENSING)
+    {
+        tft.fillScreen(ILI9341_BLACK);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setTextSize(3);
+        tft.setCursor(60, tft.height() / 2 - 10);
+        tft.print("Dispensing...");
+    }
+    else if (screenState == FINISHED)
+    {
+        tft.fillScreen(ILI9341_BLACK);
+        tft.setTextColor(ILI9341_GREEN);
+        tft.setTextSize(3);
+        tft.setCursor(80, tft.height() / 2 - 10);
+        tft.print("Finished!");
     }
 }
 
@@ -256,9 +286,15 @@ void ScreenController::handleButtonPress(int idx)
         if (strcmp(btn.label, "Drink 1") == 0)
         { // Start button
             Serial.println("Dispensing drink 1...");
-            // Implement start functionality here
+            screenState = DISPENSING;
+            this->servoController->close();
+            this->ledController->mode = DISPENSING_LEDS;
+            this->ledController->nextUpdateMode = FINISHED_LEDS;
+            this->nextScreenStateValue = FINISHED;
+            this->ledController->nextUpdateTime = millis() + 10000; // After 10 seconds, switch mode
+            this->nextScreenStateTime = millis() + 10000;           // After 10 seconds
         }
-        else if (strcmp(btn.label, "Drink 2...") == 0)
+        else if (strcmp(btn.label, "Drink 2") == 0)
         { // Back button
             Serial.println("Dispensing drink 2...");
             // Implement drink 2 functionality here
@@ -280,18 +316,39 @@ void ScreenController::handleButtonPress(int idx)
         }
         else if (strcmp(btn.label, "P1") == 0)
         { // T1 button
-            Serial.println("Pump 1 test");
-            this->pump1->dispenseVolume(200); // Dispense 200 mL for testing
+            Serial.println("Pump 1 selected");
+            screenState = DISPENSING;
+            this->servoController->close();
+            this->ledController->mode = DISPENSING_LEDS;
+            this->ledController->nextUpdateMode = FINISHED_LEDS;
+            this->nextScreenStateValue = FINISHED;
+            this->ledController->nextUpdateTime = millis() + 10000; // After 10 seconds, switch mode
+            this->nextScreenStateTime = millis() + 10000;           // After 10 seconds
+            this->pump1->dispenseVolume(200);                       // Dispense 200 mL for testing
         }
         else if (strcmp(btn.label, "P2") == 0)
         { // T2 button
             Serial.println("Pump 2 selected");
-            this->pump2->dispenseVolume(200); // Dispense 200 mL for testing
+            screenState = DISPENSING;
+            this->servoController->close();
+            this->ledController->mode = DISPENSING_LEDS;
+            this->ledController->nextUpdateMode = FINISHED_LEDS;
+            this->nextScreenStateValue = FINISHED;
+            this->ledController->nextUpdateTime = millis() + 10000; // After 10 seconds, switch mode
+            this->nextScreenStateTime = millis() + 10000;           // After 10 seconds
+            this->pump2->dispenseVolume(200);                       // Dispense 200 mL for testing
         }
         else if (strcmp(btn.label, "P3") == 0)
         { // T3 button
             Serial.println("Pump 3 selected");
-            this->pump3->dispenseVolume(200); // Dispense 200 mL for testing
+            screenState = DISPENSING;
+            this->servoController->close();
+            this->ledController->mode = DISPENSING_LEDS;
+            this->ledController->nextUpdateMode = FINISHED_LEDS;
+            this->nextScreenStateValue = FINISHED;
+            this->ledController->nextUpdateTime = millis() + 10000; // After 10 seconds, switch mode
+            this->nextScreenStateTime = millis() + 10000;           // After 10 seconds
+            this->pump3->dispenseVolume(200);                       // Dispense 200 mL for testing
         }
         else if (strcmp(btn.label, "Servo") == 0)
         { // Servo button
@@ -303,21 +360,20 @@ void ScreenController::handleButtonPress(int idx)
         else if (strcmp(btn.label, "LEDS") == 0)
         { // LEDS button
             Serial.println("LEDs test selected");
-            LEDController *ledCtrl = this->ledController;
-            if (ledCtrl)
+            if (this->ledController->mode == DISPENSING_LEDS)
             {
-                if (ledCtrl->mode == DISPENSING_LEDS)
-                {
-                    ledCtrl->mode = FINISHED_LEDS;
-                }
-                else if (ledCtrl->mode == FINISHED_LEDS)
-                {
-                    ledCtrl->mode = IDLE_LEDS;
-                }
-                else
-                {
-                    ledCtrl->mode = DISPENSING_LEDS;
-                }
+                Serial.println("Switching to FINISHED_LEDS mode");
+                this->ledController->mode = FINISHED_LEDS;
+            }
+            else if (this->ledController->mode == FINISHED_LEDS)
+            {
+                Serial.println("Switching to IDLE_LEDS mode");
+                this->ledController->mode = IDLE_LEDS;
+            }
+            else
+            {
+                Serial.println("Switching to DISPENSING_LEDS mode");
+                this->ledController->mode = DISPENSING_LEDS;
             }
         };
     }
@@ -351,7 +407,7 @@ bool ScreenController::isPhantomTouch(int16_t tx, int16_t ty, uint16_t pressure)
         }
         return true; // Ignore overly hard touches
     }
-    if (millis() - this->lastTouchTime > 300)
+    if (millis() - this->lastTouchTime > 200)
     {
         if (DEBUG_TOUCH)
         {

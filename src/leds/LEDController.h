@@ -21,12 +21,15 @@ public:
     void update();
     LEDMode mode; // Add mode member to track current state
 
+    uint32_t nextUpdateTime = 0;
+    LEDMode nextUpdateMode;
 private:
     CRGB *leds;
     uint32_t lastUpdate;
     int idleIndex;
     uint8_t rainbowHue;
     bool finishedOn;
+
 };
 
 #endif // LEDCONTROLLER_H

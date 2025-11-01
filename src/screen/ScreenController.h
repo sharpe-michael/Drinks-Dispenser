@@ -12,7 +12,9 @@
 enum ScreenState
 {
     IDLE,
-    ACTIVE
+    ACTIVE,
+    DISPENSING,
+    FINISHED
 };
 enum MenuType
 {
@@ -50,14 +52,14 @@ private:
     ServoController *servoController;
 
     // Animation state variables
-    unsigned long nextUpdateTime;
+    uint32_t nextUpdateTime;
     int16_t eye_x = 80;
     int16_t eye_y = 80;
     int8_t eye_dx = 3;
     int8_t eye_dy = 2;
     bool isBlinking = false;
-    unsigned long blinkStartTime = 0;
-    unsigned long nextBlinkTime = 0;
+    uint32_t blinkStartTime = 0;
+    uint32_t nextBlinkTime = 0;
     int16_t prev_eye_x = 80;
     int16_t prev_eye_y = 80;
 
@@ -65,6 +67,8 @@ private:
     MenuType currentMenu = REGULAR;
     ScreenState screenState = IDLE; // Start in IDLE mode
     ScreenState lastScreenState = IDLE;
+    uint32_t nextScreenStateTime = 0;
+    ScreenState nextScreenStateValue = IDLE;
 
     // --- Menu Management Members ---
     static const int REGULAR_BUTTON_COUNT = 3; // Define array size
@@ -79,8 +83,8 @@ private:
     int numActiveMenuButtons;
 
     TouchPoint lastTouch = {-1, -1};
-    uint16_t lastTouchTime = 0;
-    uint16_t lastGoodTouchTime = 0;
+    uint32_t lastTouchTime = 0;
+    uint32_t lastGoodTouchTime = 0;
 
     // Private methods
     void drawText(int16_t x, int16_t y, const char *text, uint16_t color, uint8_t size);
