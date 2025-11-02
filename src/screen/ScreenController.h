@@ -38,7 +38,7 @@ struct TouchPoint
 class ScreenController
 {
 public:
-    ScreenController(int8_t screenCSPin, int8_t dcPin, int8_t rstPin, int8_t touchCSPin, LEDController *ledCtrl, PumpController *pump1, PumpController *pump2, PumpController *pump3, ServoController *servoCtrl);
+    ScreenController(int8_t screenCSPin, int8_t dcPin, int8_t rstPin, int8_t touchCSPin, LEDController *ledCtrl, PumpController *pump1, PumpController *pump2, ServoController *servoCtrl);
     void begin();
     void update();
 
@@ -72,7 +72,7 @@ private:
 
     // --- Menu Management Members ---
     static const int REGULAR_BUTTON_COUNT = 3; // Define array size
-    static const int TEST_BUTTON_COUNT = 6;    // Define array size
+    static const int TEST_BUTTON_COUNT = 5;    // Define array size
 
     // The predefined button arrays
     Button regularMenuButtons[REGULAR_BUTTON_COUNT];

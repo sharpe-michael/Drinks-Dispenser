@@ -13,7 +13,7 @@ LEDController::LEDController()
 void LEDController::begin()
 {
     FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, numLEDs);
-    FastLED.setBrightness(50); // Set initial brightness to 50%
+    FastLED.setBrightness(100); // Set initial brightness to 50%
     // Default to IDLE mode
     mode = IDLE_LEDS;
 

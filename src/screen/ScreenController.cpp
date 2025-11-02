@@ -6,13 +6,13 @@
 
 #define DEBUG_TOUCH true
 
-ScreenController::ScreenController(int8_t tftCsPin, int8_t dcPin, int8_t rstPin, int8_t touchCSPin, LEDController *ledCtrl, PumpController *pump1, PumpController *pump2, PumpController *pump3, ServoController *servoCtrl)
+ScreenController::ScreenController(int8_t tftCsPin, int8_t dcPin, int8_t rstPin, int8_t touchCSPin, LEDController *ledCtrl, PumpController *pump1, PumpController *pump2, ServoController *servoCtrl)
     : tft(Adafruit_ILI9341(tftCsPin, dcPin, rstPin)), ts(touchCSPin)
 {
     this->ledController = ledCtrl;
     this->pump1 = pump1;
     this->pump2 = pump2;
-    this->pump3 = pump3;
+    // this->pump3 = pump3;
     this->servoController = servoCtrl;
 
     pinMode(tftCsPin, OUTPUT);
@@ -21,18 +21,16 @@ ScreenController::ScreenController(int8_t tftCsPin, int8_t dcPin, int8_t rstPin,
     digitalWrite(touchCSPin, HIGH); // Deselect touch
 
     // Initialize Regular Menu Buttons
-    // Regular Menu Buttons - "Sezier" look: rounded corners, bold colors, larger text
-    regularMenuButtons[0] = {20, 30, 100, 50, "Drink 1", ILI9341_WHITE, ILI9341_BLUE};
-    regularMenuButtons[2] = {20, 100, 210, 50, "Drink 2", ILI9341_WHITE, ILI9341_RED};
-    regularMenuButtons[1] = {130, 30, 100, 50, "Test", ILI9341_WHITE, ILI9341_GREEN};
+    regularMenuButtons[0] = {0, 0, 170, 200, "Vod (Dbl)+Cran", ILI9341_WHITE, ILI9341_RED};
+    regularMenuButtons[1] = {170, 0, 170, 200, "Vod (Dbl)", ILI9341_BLUE, ILI9341_WHITE};
+    regularMenuButtons[2] = {0, 200, 340, 40, "Test", ILI9341_WHITE, ILI9341_GREEN};
 
-    // Test Menu Buttons - "Sezier" look: more vibrant backgrounds, bigger, rounded
+    // Test Menu Buttons
     testMenuButtons[0] = {20, 30, 70, 50, "P1", ILI9341_WHITE, ILI9341_CYAN};
     testMenuButtons[1] = {100, 30, 70, 50, "P2", ILI9341_WHITE, ILI9341_MAGENTA};
-    testMenuButtons[2] = {180, 30, 70, 50, "P3", ILI9341_WHITE, ILI9341_YELLOW};
-    testMenuButtons[3] = {20, 90, 70, 50, "Servo", ILI9341_WHITE, ILI9341_ORANGE};
-    testMenuButtons[4] = {100, 90, 70, 50, "LEDS", ILI9341_WHITE, ILI9341_PURPLE};
-    testMenuButtons[5] = {20, 150, 230, 50, "Back...", ILI9341_WHITE, ILI9341_RED};
+    testMenuButtons[2] = {20, 90, 70, 50, "Servo", ILI9341_WHITE, ILI9341_ORANGE};
+    testMenuButtons[3] = {100, 90, 70, 50, "LEDS", ILI9341_WHITE, ILI9341_PURPLE};
+    testMenuButtons[4] = {20, 150, 230, 50, "Back...", ILI9341_WHITE, ILI9341_RED};
 }
 
 // Animation state variables
@@ -125,6 +123,11 @@ void ScreenController::showMenu()
 
 void ScreenController::update()
 {
+    // uint8_t x = tft.readcommand8(ILI9341_RDMODE);
+    // if (x != 0x05)
+    // {
+    //     begin();
+    // }
     if (nextScreenStateTime != 0 && millis() >= nextScreenStateTime)
     {
         screenState = nextScreenStateValue;
@@ -146,6 +149,10 @@ void ScreenController::update()
             this->nextScreenStateValue = IDLE;
             this->nextScreenStateTime = millis() + 5000; // After 15
             this->servoController->open();
+        }
+        if (lastScreenState == FINISHED)
+        {
+            begin(); // Reset to initial state
         }
         lastScreenState = screenState;
     }
@@ -283,21 +290,39 @@ void ScreenController::handleButtonPress(int idx)
     if (currentMenu == REGULAR)
     {
         Button &btn = regularMenuButtons[idx];
-        if (strcmp(btn.label, "Drink 1") == 0)
+        if (strcmp(btn.label, "Vod (Dbl)+Cran") == 0)
         { // Start button
             Serial.println("Dispensing drink 1...");
             screenState = DISPENSING;
             this->servoController->close();
             this->ledController->mode = DISPENSING_LEDS;
+
+            uint32_t runTimePump2 = this->pump2->dispenseVolume(50); // Dispense 100 mL for drink 1 after 2 seconds
+            uint32_t runTimePump1 = this->pump1->dispenseVolume(150, runTimePump2 + 300);               // Dispense 250 mL for drink 1
+            // uint32_t runTimePump3 = this->pump3->dispenseVolume(50, runTimePump1 + 300 + runTimePump2 + 300);  // Dispense 50 mL for drink 1 after 4 seconds
+
+            uint32_t totalDispenseTime = runTimePump1 + runTimePump2 + 300; // + runTimePump3 + 600; // Total time including delays
+
             this->ledController->nextUpdateMode = FINISHED_LEDS;
             this->nextScreenStateValue = FINISHED;
-            this->ledController->nextUpdateTime = millis() + 10000; // After 10 seconds, switch mode
-            this->nextScreenStateTime = millis() + 10000;           // After 10 seconds
+            this->ledController->nextUpdateTime = millis() + totalDispenseTime; // After dispense seconds, switch mode
+            this->nextScreenStateTime = millis() + totalDispenseTime;           // After dispense seconds
         }
-        else if (strcmp(btn.label, "Drink 2") == 0)
-        { // Back button
+        else if (strcmp(btn.label, "Vod (Dbl)") == 0)
+        { // Start button
             Serial.println("Dispensing drink 2...");
-            // Implement drink 2 functionality here
+            screenState = DISPENSING;
+            this->servoController->close();
+            this->ledController->mode = DISPENSING_LEDS;
+
+            uint32_t runTimePump2 = this->pump2->dispenseVolume(50); // Dispense 50 mL of Vodka
+
+            uint32_t totalDispenseTime = runTimePump2; // + runTimePump3 + 600; // Total time including delays
+
+            this->ledController->nextUpdateMode = FINISHED_LEDS;
+            this->nextScreenStateValue = FINISHED;
+            this->ledController->nextUpdateTime = millis() + totalDispenseTime; // After dispense seconds, switch mode
+            this->nextScreenStateTime = millis() + totalDispenseTime;           // After dispense seconds
         }
         else if (strcmp(btn.label, "Test") == 0)
         { // Test button
@@ -320,11 +345,11 @@ void ScreenController::handleButtonPress(int idx)
             screenState = DISPENSING;
             this->servoController->close();
             this->ledController->mode = DISPENSING_LEDS;
+            uint32_t runtime = this->pump1->dispenseVolume(50);                       // Dispense 200 mL for testing
             this->ledController->nextUpdateMode = FINISHED_LEDS;
             this->nextScreenStateValue = FINISHED;
-            this->ledController->nextUpdateTime = millis() + 10000; // After 10 seconds, switch mode
-            this->nextScreenStateTime = millis() + 10000;           // After 10 seconds
-            this->pump1->dispenseVolume(200);                       // Dispense 200 mL for testing
+            this->ledController->nextUpdateTime = millis() + runtime; // After 10 seconds, switch mode
+            this->nextScreenStateTime = millis() + runtime;           // After 10 seconds
         }
         else if (strcmp(btn.label, "P2") == 0)
         { // T2 button
@@ -332,23 +357,11 @@ void ScreenController::handleButtonPress(int idx)
             screenState = DISPENSING;
             this->servoController->close();
             this->ledController->mode = DISPENSING_LEDS;
+            uint32_t runtime = this->pump2->dispenseVolume(50);                       // Dispense 200 mL for testing
             this->ledController->nextUpdateMode = FINISHED_LEDS;
             this->nextScreenStateValue = FINISHED;
-            this->ledController->nextUpdateTime = millis() + 10000; // After 10 seconds, switch mode
-            this->nextScreenStateTime = millis() + 10000;           // After 10 seconds
-            this->pump2->dispenseVolume(200);                       // Dispense 200 mL for testing
-        }
-        else if (strcmp(btn.label, "P3") == 0)
-        { // T3 button
-            Serial.println("Pump 3 selected");
-            screenState = DISPENSING;
-            this->servoController->close();
-            this->ledController->mode = DISPENSING_LEDS;
-            this->ledController->nextUpdateMode = FINISHED_LEDS;
-            this->nextScreenStateValue = FINISHED;
-            this->ledController->nextUpdateTime = millis() + 10000; // After 10 seconds, switch mode
-            this->nextScreenStateTime = millis() + 10000;           // After 10 seconds
-            this->pump3->dispenseVolume(200);                       // Dispense 200 mL for testing
+            this->ledController->nextUpdateTime = millis() + runtime; // After 10 seconds, switch mode
+            this->nextScreenStateTime = millis() + runtime;           // After 10 seconds
         }
         else if (strcmp(btn.label, "Servo") == 0)
         { // Servo button
